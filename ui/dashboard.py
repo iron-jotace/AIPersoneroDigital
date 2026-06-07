@@ -101,13 +101,13 @@ def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict
     st.subheader("Resumen Operativo")
     latest = snapshots[-1]["snapshot"] if snapshots else None
     last_pct = latest["actas_contabilizadas_pct"] if latest else 0.0
-    system_status = "FROZEN" if latest and last_pct >= FREEZE_THRESHOLD_PCT else "ACTIVE"
+    system_status = "CONGELADO" if latest and last_pct >= FREEZE_THRESHOLD_PCT else "ACTIVO"
     last_sequence = latest["sequence"] if latest else "-"
     columns = st.columns(6)
     columns[0].metric("Estado del sistema", system_status)
     columns[1].metric("Último % de actas", f"{last_pct}%" if latest else "0%")
     columns[2].metric("Última secuencia", last_sequence)
-    columns[3].metric("Snapshots", len(snapshots))
+    columns[3].metric("Capturas", len(snapshots))
     columns[4].metric("Eventos", len(events))
     columns[5].metric("Casos de evidencia", len(cases))
     with st.container(border=True):
@@ -122,10 +122,10 @@ def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict
         vote_gap_abs = latest.get("vote_gap_abs", abs(candidate_a_votes - candidate_b_votes))
         vote_gap_pct = latest.get("vote_gap_pct", 0.0)
         kpi_columns = st.columns(4)
-        kpi_columns[0].metric(f"{CANDIDATE_A_NAME} votes", f"{candidate_a_votes:,}")
-        kpi_columns[1].metric(f"{CANDIDATE_B_NAME} votes", f"{candidate_b_votes:,}")
+        kpi_columns[0].metric("Votos Keiko Fujimori", f"{candidate_a_votes:,}")
+        kpi_columns[1].metric("Votos Roberto Sánchez", f"{candidate_b_votes:,}")
         kpi_columns[2].metric("Keiko - Sánchez gap", f"{vote_gap_abs:,}")
-        kpi_columns[3].metric("Vote gap pct", f"{vote_gap_pct}%")
+        kpi_columns[3].metric("% brecha de votos", f"{vote_gap_pct}%")
 
         gap_frame = pd.DataFrame(
             [
@@ -159,32 +159,32 @@ def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict
             {
                 "source": latest["source"],
                 "source_mode": latest.get("source_mode", "MOCK"),
-                f"{CANDIDATE_A_NAME} votes": candidate_a_votes,
-                f"{CANDIDATE_B_NAME} votes": candidate_b_votes,
+                "Votos Keiko Fujimori": candidate_a_votes,
+                "Votos Roberto Sánchez": candidate_b_votes,
                 "Keiko - Sánchez gap": vote_gap_abs,
-                "Vote gap pct": vote_gap_pct,
+                "% brecha de votos": vote_gap_pct,
                 "latest_hash": snapshots[-1]["hash"],
             }
         )
 
 
 def _render_methodology() -> None:
-    st.subheader("Methodology")
+    st.subheader("Metodología")
     st.markdown(
         """
-- Collection: deterministic mock public-data snapshots only. SOURCE_MODE defaults to MOCK. Real ONPE endpoints are intentionally not called in this MVP.
+- Recolección: snapshots mock determinísticos de datos públicos. SOURCE_MODE permanece en MOCK por defecto. En este MVP no se llaman endpoints reales de ONPE.
 - No se realizan llamadas reales a ONPE.
 - La fuente real permanece desactivada hasta que ONPE publique una ruta pública estable de segunda vuelta.
 - El sistema no infiere datos reales desde portales de primera vuelta ni endpoints históricos.
-- Integrity: every raw snapshot is canonicalized and hashed with SHA-256 for reproducibility. Aggregate snapshot hash changes are expected as counting progresses.
-- Document hash alerts: DOCUMENT_HASH_CHANGED is reserved for stable documents or actas whose content hash changes across captures.
-- Eventos: SNAPSHOT_CAPTURED, DOCUMENT_HASH_CHANGED, ANOMALY_DETECTED, CASE_OPENED, CASE_EXPLAINED, CASE_CLOSED and SYSTEM_FROZEN.
-- Case lifecycle: CASE_EXPLAINED and CASE_CLOSED are emitted only after explicit human review actions.
-- Statistics: robust MAD detection over vote-gap evolution.
+- Integridad: cada snapshot crudo se canonicaliza y se resume con SHA-256 para reproducibilidad. Los cambios de hash en snapshots agregados son esperados durante el avance del conteo.
+- Alertas de hash documental: DOCUMENT_HASH_CHANGED se reserva para documentos estables o actas cuyo hash de contenido cambia entre capturas.
+- Eventos: SNAPSHOT_CAPTURED, DOCUMENT_HASH_CHANGED, ANOMALY_DETECTED, CASE_OPENED, CASE_EXPLAINED, CASE_CLOSED y SYSTEM_FROZEN.
+- Ciclo de vida de casos: CASE_EXPLAINED y CASE_CLOSED solo se emiten después de acciones explícitas de revisión humana.
+- Estadística: detección robusta MAD sobre la evolución de la brecha de votos.
 - ERS: 0.30*Stat_norm + 0.25*Integrity_norm + 0.20*Persistence_norm + 0.15*MultiSource_norm + 0.10*Context_norm.
-- Confidence: source official, hash+snapshot, reproducibility, human review and multi-artifact consistency.
-- Evidence: E0-E5 levels describe evidence completeness, not intent or legal conclusions.
-- Candidate labels: mock runoff snapshots use Keiko Fujimori and Roberto Sánchez for local testing only.
+- Confianza: fuente oficial, hash+snapshot, reproducibilidad, revisión humana y consistencia multiartefacto.
+- Evidencia: los niveles E0-E5 describen completitud de evidencia, no intenciones ni conclusiones legales.
+- Etiquetas de candidatos: los snapshots mock de segunda vuelta usan Keiko Fujimori y Roberto Sánchez solo para pruebas locales.
         """
     )
 
@@ -193,21 +193,21 @@ def render_dashboard() -> None:
     st.title("Personero Digital")
     _render_disclaimers()
     with st.sidebar:
-        st.header("Controls")
+        st.header("Controles")
         st.caption(f"Fuente de datos: {SOURCE_MODE}")
         st.caption(f"Estado fuente real ONPE: {REAL_SOURCE_STATUS}")
         st.caption("Nota: portal público de segunda vuelta aún no disponible para resultados.")
         st.caption(REAL_SOURCE_STATUS_NOTE)
-        if st.button("Capture mock snapshot", type="primary"):
+        if st.button("Capturar snapshot mock", type="primary"):
             capture_cycle(force=True)
             st.rerun()
-        if st.button("Use cache-aware capture"):
+        if st.button("Captura con caché"):
             capture_cycle(force=False)
             st.rerun()
-        if st.button("Generate 12 mock snapshots"):
+        if st.button("Generar 12 snapshots mock"):
             generate_mock_snapshots(12)
             st.rerun()
-        if st.button("Generate freeze scenario"):
+        if st.button("Generar escenario de congelación"):
             generate_freeze_scenario()
             st.rerun()
 
@@ -215,7 +215,7 @@ def render_dashboard() -> None:
     events = read_jsonl(EVENTS_PATH)
     cases = read_jsonl(CASES_PATH)
 
-    tabs = st.tabs(["Overview", "Comportamiento Electoral", "SOC Feed", "Integrity", "Cases", "Methodology"])
+    tabs = st.tabs(["Resumen", "Comportamiento Electoral", "Feed SOC", "Integridad", "Casos", "Metodología"])
     with tabs[0]:
         _render_overview(snapshots, cases, events)
     with tabs[1]:

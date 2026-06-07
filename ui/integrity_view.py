@@ -13,7 +13,7 @@ def _row_status(item: dict) -> str:
 
 
 def render_integrity_view(snapshots: list[dict], events: list[dict]) -> None:
-    st.subheader("Integrity Monitor")
+    st.subheader("Monitor de Integridad")
     if not snapshots:
         st.info("No snapshots persisted.")
         return

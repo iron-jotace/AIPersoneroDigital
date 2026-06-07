@@ -5,7 +5,7 @@ import streamlit as st
 
 
 def render_soc_feed(events: list[dict]) -> None:
-    st.subheader("SOC Feed")
+    st.subheader("Feed SOC")
     if not events:
         st.info("No events captured yet.")
         return
