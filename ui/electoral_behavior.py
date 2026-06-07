@@ -171,8 +171,8 @@ def render_electoral_behavior(snapshots: list[dict], events: list[dict], cases: 
         .rename(
             columns={
                 "snapshot": "sequence",
-                f"{CANDIDATE_A_NAME} votes": "Keiko Fujimori votes",
-                f"{CANDIDATE_B_NAME} votes": "Roberto Sánchez votes",
+                f"{CANDIDATE_A_NAME} votes": "Votos Keiko Fujimori",
+                f"{CANDIDATE_B_NAME} votes": "Votos Roberto Sánchez",
                 "Keiko - Sánchez vote gap": "Keiko - Sánchez gap",
                 "Keiko - Sánchez gap pct": "Keiko - Sánchez gap pct",
             }
@@ -182,8 +182,8 @@ def render_electoral_behavior(snapshots: list[dict], events: list[dict], cases: 
                 "sequence",
                 "captured_at",
                 "actas_contabilizadas_pct",
-                "Keiko Fujimori votes",
-                "Roberto Sánchez votes",
+                "Votos Keiko Fujimori",
+                "Votos Roberto Sánchez",
                 "Keiko - Sánchez gap",
                 "Keiko - Sánchez gap pct",
                 "snapshot_hash",
