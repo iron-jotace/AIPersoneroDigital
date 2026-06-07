@@ -8,7 +8,7 @@ import streamlit as st
 from agents.anomaly_agent import detect_gap_anomalies
 from agents.evidence_agent import build_case, case_events
 from agents.integrity_agent import integrity_events, integrity_status, snapshot_hash
-from agents.onpe_agent import fetch_onpe_snapshot
+from agents.onpe_agent import select_onpe_snapshot_source
 from config import (
     CANDIDATE_A_NAME,
     CANDIDATE_B_NAME,
@@ -16,7 +16,9 @@ from config import (
     DISCLAIMER_LINES,
     EVENTS_PATH,
     FREEZE_THRESHOLD_PCT,
+    REAL_ONPE_ENABLED,
     SNAPSHOTS_PATH,
+    SOURCE_MODE,
 )
 from storage.json_store import append_jsonl, read_jsonl
 from ui.case_view import render_case_view
@@ -32,7 +34,14 @@ def _event_record(event: dict, captured_at: str) -> dict:
 
 
 def capture_cycle(force: bool = False) -> None:
-    snapshot = fetch_onpe_snapshot(force=force)
+    if SOURCE_MODE == "REAL_READ_ONLY" and not REAL_ONPE_ENABLED:
+        st.warning("REAL_READ_ONLY está configurado, pero el conector real ONPE está desactivado.")
+        return
+    try:
+        snapshot = select_onpe_snapshot_source(force=force)
+    except RuntimeError as exc:
+        st.warning(str(exc))
+        return
     digest = snapshot_hash(snapshot)
     snapshot["snapshot_hash"] = digest
     captured_at = datetime.now(timezone.utc).isoformat()
