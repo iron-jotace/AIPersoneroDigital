@@ -82,23 +82,23 @@ def generate_freeze_scenario(max_snapshots: int = 24) -> None:
 def _render_disclaimers() -> None:
     for line in DISCLAIMER_LINES:
         st.caption(line)
-    st.caption("This is observed behavior from captured snapshots.")
-    st.caption("Statistical anomaly only means unusual movement requiring review.")
+    st.caption("Comportamiento observado desde snapshots capturados.")
+    st.caption("Una anomalía estadística solo indica movimiento inusual que requiere revisión.")
 
 
 def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict]) -> None:
-    st.subheader("Executive Overview")
+    st.subheader("Resumen Operativo")
     latest = snapshots[-1]["snapshot"] if snapshots else None
     last_pct = latest["actas_contabilizadas_pct"] if latest else 0.0
     system_status = "FROZEN" if latest and last_pct >= FREEZE_THRESHOLD_PCT else "ACTIVE"
     last_sequence = latest["sequence"] if latest else "-"
     columns = st.columns(6)
-    columns[0].metric("System status", system_status)
+    columns[0].metric("Estado del sistema", system_status)
     columns[1].metric("Último % de actas", f"{last_pct}%" if latest else "0%")
     columns[2].metric("Última secuencia", last_sequence)
     columns[3].metric("Snapshots", len(snapshots))
-    columns[4].metric("Events", len(events))
-    columns[5].metric("Evidence cases", len(cases))
+    columns[4].metric("Eventos", len(events))
+    columns[5].metric("Casos de evidencia", len(cases))
     if latest:
         candidate_a_votes = latest.get("candidate_a_votes", latest.get("national_totals", {}).get("candidate_a_votes", 0))
         candidate_b_votes = latest.get("candidate_b_votes", latest.get("national_totals", {}).get("candidate_b_votes", 0))
@@ -158,7 +158,7 @@ def _render_methodology() -> None:
 - Collection: deterministic mock public-data snapshots only. SOURCE_MODE defaults to MOCK. Real ONPE endpoints are intentionally not called in this MVP.
 - Integrity: every raw snapshot is canonicalized and hashed with SHA-256 for reproducibility. Aggregate snapshot hash changes are expected as counting progresses.
 - Document hash alerts: DOCUMENT_HASH_CHANGED is reserved for stable documents or actas whose content hash changes across captures.
-- Events: SNAPSHOT_CAPTURED, DOCUMENT_HASH_CHANGED, ANOMALY_DETECTED, CASE_OPENED, CASE_EXPLAINED, CASE_CLOSED and SYSTEM_FROZEN.
+- Eventos: SNAPSHOT_CAPTURED, DOCUMENT_HASH_CHANGED, ANOMALY_DETECTED, CASE_OPENED, CASE_EXPLAINED, CASE_CLOSED and SYSTEM_FROZEN.
 - Case lifecycle: CASE_EXPLAINED and CASE_CLOSED are emitted only after explicit human review actions.
 - Statistics: robust MAD detection over vote-gap evolution.
 - ERS: 0.30*Stat_norm + 0.25*Integrity_norm + 0.20*Persistence_norm + 0.15*MultiSource_norm + 0.10*Context_norm.

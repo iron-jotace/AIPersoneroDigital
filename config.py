@@ -7,6 +7,15 @@ APP_NAME = "Personero Digital"
 SOURCE_MODE = "MOCK"
 CANDIDATE_A_NAME = "Keiko Fujimori"
 CANDIDATE_B_NAME = "Roberto Sánchez"
+
+# Real public-data connector skeleton. Disabled by default for the MVP.
+REAL_ONPE_ENABLED = False
+ONPE_BASE_URL = ""
+ONPE_RESULTS_ENDPOINT = ""
+ONPE_CACHE_TTL_SECONDS = 300
+MAX_REQUESTS_PER_ENDPOINT_PER_5_MIN = 1
+USER_AGENT = "PersoneroDigital-MVP/0.1 public-observability research; contact=local"
+
 DATA_DIR = Path("data")
 BRONZE_DIR = DATA_DIR / "bronze"
 SILVER_DIR = DATA_DIR / "silver"

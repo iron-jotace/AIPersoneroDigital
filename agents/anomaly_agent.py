@@ -24,9 +24,11 @@ def detect_gap_anomalies(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
         return []
 
     latest = history[-1]
+    # Vote-gap anomalies are statistical observations, not integrity anomalies.
+    # integrity_norm=1.0 is reserved for real stable-document or acta hash changes.
     ers = compute_ers(
         stat_norm=min(latest_score / 8, 1),
-        integrity_norm=1.0,
+        integrity_norm=0.25,
         persistence_norm=min(len([s for s in scores[-3:] if s >= 3.0]) / 3, 1),
         multi_source_norm=0.25,
         context_norm=0.45,
