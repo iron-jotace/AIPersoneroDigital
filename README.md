@@ -17,11 +17,14 @@ streamlit run app.py
 
 - Mock ONPE collector only; no real ONPE endpoints are called.
 - `SOURCE_MODE` defaults to `MOCK`.
+- Real public-data connector settings are present as a disabled read-only skeleton; real endpoints are not called yet.
 - Mock runoff labels use `Keiko Fujimori` and `Roberto Sánchez` for local testing only.
 - Deterministic fake electoral data with local cache and basic rate limiting.
 - Append-only snapshots in `data/bronze/onpe_snapshots.jsonl`.
 - Canonical SHA-256 hash per raw snapshot.
 - Canonical events: `SNAPSHOT_CAPTURED`, `DOCUMENT_HASH_CHANGED`, `ANOMALY_DETECTED`, `CASE_OPENED`, `CASE_EXPLAINED`, `CASE_CLOSED`, `SYSTEM_FROZEN`.
+- `DOCUMENT_HASH_CHANGED` only applies to stable documents or actas with the same stable artifact id; it does not apply to aggregate snapshots.
+- Aggregate snapshot hash changes are expected while counting evolves and are marked `EXPECTED_CHANGE`.
 - MAD robust anomaly detection over vote gap evolution.
 - ERS normalized score using the requested weighted formula.
 - Confidence score and evidence levels `E0` to `E5`.

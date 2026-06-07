@@ -33,8 +33,9 @@ def build_case(event: dict[str, Any]) -> dict[str, Any]:
         "summary": event["summary"],
         "detector_explanation": (
             "The MAD detector observed unusual movement in the Keiko-Sánchez vote gap. "
-            "This is observed behavior from captured snapshots. A gap movement is not evidence of fraud. "
-            "A statistical anomaly only means unusual movement requiring review."
+            "Comportamiento observado desde snapshots capturados. "
+            "Un movimiento de brecha no constituye evidencia de fraude. "
+            "Una anomalía estadística solo indica movimiento inusual que requiere revisión."
         ),
         "non_conclusive_note": "Caso abierto para revisión humana; no constituye prueba de fraude.",
         "snapshot_hash": event["snapshot_hash"],
