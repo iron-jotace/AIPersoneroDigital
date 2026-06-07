@@ -11,7 +11,10 @@ from config import (
     CANDIDATE_A_NAME,
     CANDIDATE_B_NAME,
     MOCK_SEED,
+    ONPE_BASE_URL,
+    ONPE_RESULTS_ENDPOINT,
     RATE_LIMIT_SECONDS,
+    REAL_ONPE_ENABLED,
     SNAPSHOTS_PATH,
     SOURCE_MODE,
 )
@@ -142,3 +145,28 @@ def fetch_onpe_snapshot(force: bool = False) -> dict[str, Any]:
         {"cache_version": CACHE_VERSION, "fetched_at_epoch": now, "sequence": sequence, "snapshot": snapshot},
     )
     return json.loads(json.dumps(snapshot, sort_keys=True))
+
+
+def fetch_real_onpe_snapshot(force: bool = False) -> dict[str, Any]:
+    """Prepare passive read-only public-data access without enabling network calls.
+
+    This connector skeleton is intentionally disabled by default.
+    Safe operating constraints:
+    - Passive read-only public-data access only.
+    - No authentication bypass.
+    - No aggressive scraping.
+    - Rate limiting must be respected.
+    """
+    if not REAL_ONPE_ENABLED:
+        raise RuntimeError("REAL_READ_ONLY connector is disabled.")
+    if not ONPE_BASE_URL or not ONPE_RESULTS_ENDPOINT:
+        raise RuntimeError("REAL_READ_ONLY connector requires ONPE_BASE_URL and ONPE_RESULTS_ENDPOINT.")
+    raise NotImplementedError("REAL_READ_ONLY ONPE connector is not implemented yet.")
+
+
+def select_onpe_snapshot_source(force: bool = False) -> dict[str, Any]:
+    if SOURCE_MODE == "MOCK":
+        return fetch_onpe_snapshot(force=force)
+    if SOURCE_MODE == "REAL_READ_ONLY":
+        return fetch_real_onpe_snapshot(force=force)
+    raise ValueError(f"Unsupported SOURCE_MODE: {SOURCE_MODE}")
