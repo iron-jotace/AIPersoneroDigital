@@ -15,6 +15,11 @@ ONPE_RESULTS_ENDPOINT = ""
 ONPE_CACHE_TTL_SECONDS = 300
 MAX_REQUESTS_PER_ENDPOINT_PER_5_MIN = 1
 USER_AGENT = "PersoneroDigital-MVP/0.1 public-observability research; contact=local"
+REAL_SOURCE_STATUS = "REAL_SOURCE_WAITING_SECOND_ROUND"
+REAL_SOURCE_STATUS_NOTE = (
+    "El portal público de segunda vuelta muestra 'Próximamente'. "
+    "No se integra fuente real hasta confirmar endpoint público oficial."
+)
 
 DATA_DIR = Path("data")
 BRONZE_DIR = DATA_DIR / "bronze"

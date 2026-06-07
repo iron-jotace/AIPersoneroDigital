@@ -17,6 +17,8 @@ from config import (
     EVENTS_PATH,
     FREEZE_THRESHOLD_PCT,
     REAL_ONPE_ENABLED,
+    REAL_SOURCE_STATUS,
+    REAL_SOURCE_STATUS_NOTE,
     SNAPSHOTS_PATH,
     SOURCE_MODE,
 )
@@ -108,6 +110,12 @@ def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict
     columns[3].metric("Snapshots", len(snapshots))
     columns[4].metric("Eventos", len(events))
     columns[5].metric("Casos de evidencia", len(cases))
+    with st.container(border=True):
+        st.markdown("**Estado de fuente oficial**")
+        st.write(
+            "La fuente pública de segunda vuelta aún no está confirmada. "
+            "El sistema opera en modo MOCK y no interpreta datos de primera vuelta como datos de segunda vuelta."
+        )
     if latest:
         candidate_a_votes = latest.get("candidate_a_votes", latest.get("national_totals", {}).get("candidate_a_votes", 0))
         candidate_b_votes = latest.get("candidate_b_votes", latest.get("national_totals", {}).get("candidate_b_votes", 0))
@@ -165,6 +173,9 @@ def _render_methodology() -> None:
     st.markdown(
         """
 - Collection: deterministic mock public-data snapshots only. SOURCE_MODE defaults to MOCK. Real ONPE endpoints are intentionally not called in this MVP.
+- No se realizan llamadas reales a ONPE.
+- La fuente real permanece desactivada hasta que ONPE publique una ruta pública estable de segunda vuelta.
+- El sistema no infiere datos reales desde portales de primera vuelta ni endpoints históricos.
 - Integrity: every raw snapshot is canonicalized and hashed with SHA-256 for reproducibility. Aggregate snapshot hash changes are expected as counting progresses.
 - Document hash alerts: DOCUMENT_HASH_CHANGED is reserved for stable documents or actas whose content hash changes across captures.
 - Eventos: SNAPSHOT_CAPTURED, DOCUMENT_HASH_CHANGED, ANOMALY_DETECTED, CASE_OPENED, CASE_EXPLAINED, CASE_CLOSED and SYSTEM_FROZEN.
@@ -183,6 +194,10 @@ def render_dashboard() -> None:
     _render_disclaimers()
     with st.sidebar:
         st.header("Controls")
+        st.caption(f"Fuente de datos: {SOURCE_MODE}")
+        st.caption(f"Estado fuente real ONPE: {REAL_SOURCE_STATUS}")
+        st.caption("Nota: portal público de segunda vuelta aún no disponible para resultados.")
+        st.caption(REAL_SOURCE_STATUS_NOTE)
         if st.button("Capture mock snapshot", type="primary"):
             capture_cycle(force=True)
             st.rerun()
