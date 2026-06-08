@@ -12,6 +12,16 @@ def snapshot_hash(snapshot: dict[str, Any]) -> str:
     return canonical_hash(snapshot)
 
 
+def snapshot_captured_summary(snapshot: dict[str, Any]) -> str:
+    source_mode = snapshot.get("source_mode")
+    source = snapshot.get("source")
+    if source_mode == "MOCK" or source == "MOCK_ONPE_PUBLIC_DATA":
+        return "Snapshot mock capturado y hasheado."
+    if source_mode == "REAL_READ_ONLY" or source == "ONPE_REAL_PUBLIC_DATA":
+        return "Snapshot público ONPE en modo solo lectura capturado y hasheado."
+    return "Snapshot público capturado y hasheado."
+
+
 def integrity_status(
     artifact_type: str,
     digest: str,
@@ -40,7 +50,7 @@ def integrity_events(
     events = [
         {
             "type": "SNAPSHOT_CAPTURED",
-            "summary": "Public mock snapshot captured and hashed.",
+            "summary": snapshot_captured_summary(snapshot),
             "severity": "info",
             "snapshot_hash": digest,
             "artifact_type": artifact_type,
