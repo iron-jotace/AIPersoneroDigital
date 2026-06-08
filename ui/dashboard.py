@@ -199,8 +199,9 @@ def _render_methodology() -> None:
     st.markdown(
         """
 - Recolección: snapshots mock determinísticos de datos públicos. SOURCE_MODE permanece en MOCK por defecto. En este MVP no se llaman endpoints reales de ONPE.
-- No se realizan llamadas reales a ONPE.
-- La fuente real permanece desactivada hasta que ONPE publique una ruta pública estable de segunda vuelta.
+- En modo MOCK no se realizan llamadas reales a ONPE.
+- El conector REAL_READ_ONLY permanece desactivado por defecto y solo se activa mediante configuración explícita.
+- La fuente pública oficial de segunda vuelta fue validada mediante endpoints públicos observados desde el navegador.
 - El sistema no infiere datos reales desde portales de primera vuelta ni endpoints históricos.
 - El modo REAL_READ_ONLY solo se activa mediante configuración explícita.
 - El conector real usa únicamente endpoints públicos observados desde el navegador.
