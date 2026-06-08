@@ -45,7 +45,7 @@ def capture_cycle(force: bool = False) -> None:
         st.warning(str(exc))
         return
     digest = snapshot_hash(snapshot)
-    snapshot["snapshot_hash"] = digest
+    snapshot.setdefault("snapshot_hash", digest)
     captured_at = datetime.now(timezone.utc).isoformat()
     snapshots = read_jsonl(SNAPSHOTS_PATH)
     if snapshots and snapshots[-1]["hash"] == digest:
