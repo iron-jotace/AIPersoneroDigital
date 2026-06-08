@@ -14,7 +14,9 @@ from config import (
     CANDIDATE_B_NAME,
     MOCK_SEED,
     ONPE_BASE_URL,
+    ONPE_BROWSER_OBSERVED_USER_AGENT,
     ONPE_CACHE_TTL_SECONDS,
+    ONPE_HTTP_PROFILE,
     ONPE_ID_ELECCION,
     ONPE_PARTICIPANTS_ENDPOINT,
     ONPE_PORTAL_URL,
@@ -178,15 +180,9 @@ def fetch_real_onpe_snapshot(force: bool = False) -> dict[str, Any]:
     if cached and not force and now - float(_REAL_SNAPSHOT_CACHE["fetched_at_epoch"]) < ONPE_CACHE_TTL_SECONDS:
         return json.loads(json.dumps(cached, sort_keys=True))
 
-    headers = {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-        "User-Agent": USER_AGENT,
-        "Referer": ONPE_PORTAL_URL,
-    }
     params = {"idEleccion": ONPE_ID_ELECCION, "tipoFiltro": ONPE_TIPO_FILTRO}
     with requests.Session() as session:
-        session.headers.update(headers)
+        session.headers.update(_onpe_headers())
         process_response = _get_json(session, ONPE_PROCESS_ENDPOINT)
         totals_response = _get_json(session, ONPE_TOTALS_ENDPOINT, params=params)
         participants_response = _get_json(session, ONPE_PARTICIPANTS_ENDPOINT, params=params)
@@ -244,6 +240,30 @@ def select_onpe_snapshot_source(force: bool = False) -> dict[str, Any]:
     if SOURCE_MODE == "REAL_READ_ONLY":
         return fetch_real_onpe_snapshot(force=force)
     raise ValueError(f"Unsupported SOURCE_MODE: {SOURCE_MODE}")
+
+
+def _onpe_headers() -> dict[str, str]:
+    if ONPE_HTTP_PROFILE == "transparent":
+        return {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+            "User-Agent": USER_AGENT,
+            "Referer": ONPE_PORTAL_URL,
+        }
+    if ONPE_HTTP_PROFILE == "browser_observed":
+        # This profile exists because ONPE/CloudFront returns the HTML SPA
+        # fallback for the transparent User-Agent. It must be explicitly
+        # enabled, uses no cookies or tokens, and does not bypass auth.
+        return {
+            "Accept": "*/*",
+            "Content-Type": "application/json",
+            "User-Agent": ONPE_BROWSER_OBSERVED_USER_AGENT,
+            "Referer": ONPE_PORTAL_URL,
+            "Sec-Fetch-Dest": "empty",
+            "Sec-Fetch-Mode": "cors",
+            "Sec-Fetch-Site": "same-origin",
+        }
+    raise ValueError(f"Unsupported ONPE_HTTP_PROFILE: {ONPE_HTTP_PROFILE}")
 
 
 def _get_json(

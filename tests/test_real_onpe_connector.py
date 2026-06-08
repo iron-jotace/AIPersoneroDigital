@@ -78,10 +78,63 @@ class FakeSession:
 def _enable_real_mode(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(onpe_agent, "REAL_ONPE_ENABLED", True)
     monkeypatch.setattr(onpe_agent, "SOURCE_MODE", "REAL_READ_ONLY")
+    monkeypatch.setattr(onpe_agent, "ONPE_HTTP_PROFILE", "transparent")
     monkeypatch.setattr(onpe_agent, "_next_sequence_from_bronze", lambda: 1)
     monkeypatch.setattr(onpe_agent.requests, "Session", FakeSession)
     onpe_agent._REAL_SNAPSHOT_CACHE["fetched_at_epoch"] = 0.0
     onpe_agent._REAL_SNAPSHOT_CACHE["snapshot"] = None
+
+
+def test_transparent_profile_uses_user_agent(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(onpe_agent, "ONPE_HTTP_PROFILE", "transparent")
+
+    headers = onpe_agent._onpe_headers()
+
+    assert headers["User-Agent"] == onpe_agent.USER_AGENT
+
+
+def test_transparent_profile_does_not_include_sec_fetch_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(onpe_agent, "ONPE_HTTP_PROFILE", "transparent")
+
+    headers = onpe_agent._onpe_headers()
+
+    assert "Sec-Fetch-Dest" not in headers
+    assert "Sec-Fetch-Mode" not in headers
+    assert "Sec-Fetch-Site" not in headers
+
+
+def test_browser_observed_profile_uses_browser_observed_user_agent(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(onpe_agent, "ONPE_HTTP_PROFILE", "browser_observed")
+
+    headers = onpe_agent._onpe_headers()
+
+    assert headers["User-Agent"] == onpe_agent.ONPE_BROWSER_OBSERVED_USER_AGENT
+
+
+def test_browser_observed_profile_includes_sec_fetch_headers(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(onpe_agent, "ONPE_HTTP_PROFILE", "browser_observed")
+
+    headers = onpe_agent._onpe_headers()
+
+    assert headers["Sec-Fetch-Dest"] == "empty"
+    assert headers["Sec-Fetch-Mode"] == "cors"
+    assert headers["Sec-Fetch-Site"] == "same-origin"
+
+
+def test_onpe_headers_never_include_cookie(monkeypatch: pytest.MonkeyPatch) -> None:
+    for profile in ["transparent", "browser_observed"]:
+        monkeypatch.setattr(onpe_agent, "ONPE_HTTP_PROFILE", profile)
+
+        assert "Cookie" not in onpe_agent._onpe_headers()
+
+
+def test_invalid_onpe_http_profile_raises_value_error(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(onpe_agent, "ONPE_HTTP_PROFILE", "invalid")
+
+    with pytest.raises(ValueError):
+        onpe_agent._onpe_headers()
 
 
 def test_real_connector_rejects_when_disabled(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -130,4 +183,3 @@ def test_real_connector_computes_vote_gap_correctly(monkeypatch: pytest.MonkeyPa
 
     assert snapshot["vote_gap_abs"] == 20000
     assert snapshot["vote_gap_pct"] == 2.0
-
