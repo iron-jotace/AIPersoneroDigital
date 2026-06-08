@@ -4,6 +4,7 @@ from ui.dashboard import (
     auto_capture_countdown_seconds,
     auto_capture_interval_elapsed,
     auto_capture_is_eligible,
+    should_auto_capture_rerun,
 )
 
 
@@ -27,3 +28,14 @@ def test_auto_capture_countdown_seconds() -> None:
     assert auto_capture_countdown_seconds(now=1400.0, last_capture_ts=1000.0, interval_seconds=300) == 0
     assert auto_capture_countdown_seconds(now=1000.0, last_capture_ts=None, interval_seconds=300) == 0
 
+
+def test_should_auto_capture_rerun_only_when_enabled_and_eligible() -> None:
+    assert should_auto_capture_rerun(auto_capture_enabled=True, eligible=True)
+
+
+def test_should_auto_capture_rerun_false_when_disabled() -> None:
+    assert not should_auto_capture_rerun(auto_capture_enabled=False, eligible=True)
+
+
+def test_should_auto_capture_rerun_false_when_not_eligible() -> None:
+    assert not should_auto_capture_rerun(auto_capture_enabled=True, eligible=False)

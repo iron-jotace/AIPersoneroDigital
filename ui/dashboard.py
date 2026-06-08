@@ -33,6 +33,7 @@ from ui.soc_feed import render_soc_feed
 
 CaptureResult = Literal["captured", "unchanged", "failed"]
 AUTO_CAPTURE_INTERVALS = [300, 600, 900]
+AUTO_CAPTURE_RERUN_SECONDS = 30
 
 
 def _event_record(event: dict, captured_at: str) -> dict:
@@ -147,6 +148,10 @@ def auto_capture_countdown_seconds(now: float, last_capture_ts: float | None, in
     return max(0, int(interval_seconds - (now - last_capture_ts)))
 
 
+def should_auto_capture_rerun(auto_capture_enabled: bool, eligible: bool) -> bool:
+    return auto_capture_enabled and eligible
+
+
 def _format_utc_timestamp(epoch_seconds: float) -> str:
     return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
@@ -180,10 +185,14 @@ def _render_auto_capture_controls() -> None:
             st.success("Auto-captura ONPE real ejecutada.")
         elif result == "unchanged":
             st.info("Sin cambios nuevos respecto al último snapshot.")
-        return
+    else:
+        countdown = auto_capture_countdown_seconds(now, last_capture_ts, int(interval_seconds))
+        st.caption(f"Próxima auto-captura en {countdown} segundos.")
 
-    countdown = auto_capture_countdown_seconds(now, last_capture_ts, int(interval_seconds))
-    st.caption(f"Próxima auto-captura en {countdown} segundos.")
+    # Uses Streamlit's normal rerun model; this is not a background job.
+    if should_auto_capture_rerun(auto_capture_enabled, True):
+        time.sleep(AUTO_CAPTURE_RERUN_SECONDS)
+        st.rerun()
 
 
 def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict]) -> None:
