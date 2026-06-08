@@ -16,6 +16,7 @@ from config import (
     DISCLAIMER_LINES,
     EVENTS_PATH,
     FREEZE_THRESHOLD_PCT,
+    ONPE_HTTP_PROFILE,
     REAL_ONPE_ENABLED,
     REAL_SOURCE_STATUS,
     REAL_SOURCE_STATUS_NOTE,
@@ -35,21 +36,21 @@ def _event_record(event: dict, captured_at: str) -> dict:
     return record
 
 
-def capture_cycle(force: bool = False) -> None:
+def capture_cycle(force: bool = False) -> bool:
     if SOURCE_MODE == "REAL_READ_ONLY" and not REAL_ONPE_ENABLED:
         st.warning("REAL_READ_ONLY está configurado, pero el conector real ONPE está desactivado.")
-        return
+        return False
     try:
         snapshot = select_onpe_snapshot_source(force=force)
     except RuntimeError as exc:
         st.warning(str(exc))
-        return
+        return False
     digest = snapshot_hash(snapshot)
     snapshot.setdefault("snapshot_hash", digest)
     captured_at = datetime.now(timezone.utc).isoformat()
     snapshots = read_jsonl(SNAPSHOTS_PATH)
     if snapshots and snapshots[-1]["hash"] == digest:
-        return
+        return False
 
     artifact_type = "aggregate_snapshot"
     previous_digest = snapshots[-1]["hash"] if snapshots else None
@@ -74,6 +75,7 @@ def capture_cycle(force: bool = False) -> None:
             append_jsonl(CASES_PATH, case)
             for case_event in case_events(case):
                 append_jsonl(EVENTS_PATH, _event_record(case_event, captured_at))
+    return True
 
 
 def generate_mock_snapshots(count: int = 12) -> None:
@@ -97,6 +99,33 @@ def _render_disclaimers() -> None:
     st.caption("Una anomalía estadística solo indica movimiento inusual que requiere revisión.")
 
 
+def _capture_button_label() -> str:
+    if SOURCE_MODE == "MOCK":
+        return "Capturar snapshot mock"
+    if SOURCE_MODE == "REAL_READ_ONLY":
+        return "Capturar snapshot ONPE real"
+    return "Capturar snapshot"
+
+
+def _capture_success_message() -> str:
+    if SOURCE_MODE == "MOCK":
+        return "Snapshot mock capturado."
+    if SOURCE_MODE == "REAL_READ_ONLY":
+        return "Snapshot ONPE real capturado en modo solo lectura."
+    return "Snapshot capturado."
+
+
+def _official_source_status_text() -> str:
+    if SOURCE_MODE == "MOCK":
+        return "El sistema opera en modo MOCK. No se están capturando datos reales de ONPE."
+    if SOURCE_MODE == "REAL_READ_ONLY":
+        return (
+            "El sistema opera en modo REAL_READ_ONLY. Solo captura datos públicos oficiales de ONPE, "
+            "sin modificar fuentes externas."
+        )
+    return f"El sistema opera en modo {SOURCE_MODE}."
+
+
 def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict]) -> None:
     st.subheader("Resumen Operativo")
     latest = snapshots[-1]["snapshot"] if snapshots else None
@@ -112,10 +141,7 @@ def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict
     columns[5].metric("Casos de evidencia", len(cases))
     with st.container(border=True):
         st.markdown("**Estado de fuente oficial**")
-        st.write(
-            "La fuente pública de segunda vuelta aún no está confirmada. "
-            "El sistema opera en modo MOCK y no interpreta datos de primera vuelta como datos de segunda vuelta."
-        )
+        st.write(_official_source_status_text())
     if latest:
         candidate_a_votes = latest.get("candidate_a_votes", latest.get("national_totals", {}).get("candidate_a_votes", 0))
         candidate_b_votes = latest.get("candidate_b_votes", latest.get("national_totals", {}).get("candidate_b_votes", 0))
@@ -176,6 +202,12 @@ def _render_methodology() -> None:
 - No se realizan llamadas reales a ONPE.
 - La fuente real permanece desactivada hasta que ONPE publique una ruta pública estable de segunda vuelta.
 - El sistema no infiere datos reales desde portales de primera vuelta ni endpoints históricos.
+- El modo REAL_READ_ONLY solo se activa mediante configuración explícita.
+- El conector real usa únicamente endpoints públicos observados desde el navegador.
+- No se usan cookies, tokens ni autenticación.
+- El perfil browser_observed existe porque ONPE/CloudFront puede devolver HTML fallback con el User-Agent transparente.
+- Una anomalía no implica fraude.
+- Toda alerta requiere revisión humana.
 - Integridad: cada snapshot crudo se canonicaliza y se resume con SHA-256 para reproducibilidad. Los cambios de hash en snapshots agregados son esperados durante el avance del conteo.
 - Alertas de hash documental: DOCUMENT_HASH_CHANGED se reserva para documentos estables o actas cuyo hash de contenido cambia entre capturas.
 - Eventos: SNAPSHOT_CAPTURED, DOCUMENT_HASH_CHANGED, ANOMALY_DETECTED, CASE_OPENED, CASE_EXPLAINED, CASE_CLOSED y SYSTEM_FROZEN.
@@ -196,10 +228,14 @@ def render_dashboard() -> None:
         st.header("Controles")
         st.caption(f"Fuente de datos: {SOURCE_MODE}")
         st.caption(f"Estado fuente real ONPE: {REAL_SOURCE_STATUS}")
-        st.caption("Nota: portal público de segunda vuelta aún no disponible para resultados.")
+        st.caption(f"Perfil HTTP ONPE: {ONPE_HTTP_PROFILE}")
+        st.caption(f"Real ONPE habilitado: {REAL_ONPE_ENABLED}")
         st.caption(REAL_SOURCE_STATUS_NOTE)
-        if st.button("Capturar snapshot mock", type="primary"):
-            capture_cycle(force=True)
+        if "capture_success_message" in st.session_state:
+            st.success(st.session_state.pop("capture_success_message"))
+        if st.button(_capture_button_label(), type="primary"):
+            if capture_cycle(force=True):
+                st.session_state["capture_success_message"] = _capture_success_message()
             st.rerun()
         if st.button("Captura con caché"):
             capture_cycle(force=False)
