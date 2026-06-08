@@ -29,3 +29,6 @@ data/evidence/*.jsonl
 # Environment variables
 .env
 .env.local
+
+# Local generated cache/state
+data/bronze/*.json
