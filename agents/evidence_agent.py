@@ -43,6 +43,10 @@ def build_case(event: dict[str, Any]) -> dict[str, Any]:
         "metrics": {
             "metric": event.get("metric"),
             "value": event.get("value"),
+            "gap_delta": event.get("gap_delta"),
+            "actas_pct_delta": event.get("actas_pct_delta"),
+            "gap_delta_per_actas_pct": event.get("gap_delta_per_actas_pct"),
+            "direction": event.get("direction"),
             "mad_z": event.get("mad_z"),
             "ers": event.get("ers", 0),
         },
