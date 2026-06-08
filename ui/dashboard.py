@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import time
 from datetime import datetime, timezone
+from typing import Literal
 
 import pandas as pd
 import streamlit as st
@@ -29,6 +31,9 @@ from ui.electoral_behavior import render_electoral_behavior
 from ui.integrity_view import render_integrity_view
 from ui.soc_feed import render_soc_feed
 
+CaptureResult = Literal["captured", "unchanged", "failed"]
+AUTO_CAPTURE_INTERVALS = [300, 600, 900]
+
 
 def _event_record(event: dict, captured_at: str) -> dict:
     record = dict(event)
@@ -36,21 +41,21 @@ def _event_record(event: dict, captured_at: str) -> dict:
     return record
 
 
-def capture_cycle(force: bool = False) -> bool:
+def capture_cycle(force: bool = False) -> CaptureResult:
     if SOURCE_MODE == "REAL_READ_ONLY" and not REAL_ONPE_ENABLED:
         st.warning("REAL_READ_ONLY está configurado, pero el conector real ONPE está desactivado.")
-        return False
+        return "failed"
     try:
         snapshot = select_onpe_snapshot_source(force=force)
     except RuntimeError as exc:
         st.warning(str(exc))
-        return False
+        return "failed"
     digest = snapshot_hash(snapshot)
     snapshot.setdefault("snapshot_hash", digest)
     captured_at = datetime.now(timezone.utc).isoformat()
     snapshots = read_jsonl(SNAPSHOTS_PATH)
     if snapshots and snapshots[-1]["hash"] == digest:
-        return False
+        return "unchanged"
 
     artifact_type = "aggregate_snapshot"
     previous_digest = snapshots[-1]["hash"] if snapshots else None
@@ -75,7 +80,7 @@ def capture_cycle(force: bool = False) -> bool:
             append_jsonl(CASES_PATH, case)
             for case_event in case_events(case):
                 append_jsonl(EVENTS_PATH, _event_record(case_event, captured_at))
-    return True
+    return "captured"
 
 
 def generate_mock_snapshots(count: int = 12) -> None:
@@ -124,6 +129,61 @@ def _official_source_status_text() -> str:
             "sin modificar fuentes externas."
         )
     return f"El sistema opera en modo {SOURCE_MODE}."
+
+
+def auto_capture_is_eligible(source_mode: str, real_onpe_enabled: bool) -> bool:
+    return source_mode == "REAL_READ_ONLY" and real_onpe_enabled
+
+
+def auto_capture_interval_elapsed(now: float, last_capture_ts: float | None, interval_seconds: int) -> bool:
+    if last_capture_ts is None:
+        return True
+    return now - last_capture_ts >= interval_seconds
+
+
+def auto_capture_countdown_seconds(now: float, last_capture_ts: float | None, interval_seconds: int) -> int:
+    if last_capture_ts is None:
+        return 0
+    return max(0, int(interval_seconds - (now - last_capture_ts)))
+
+
+def _format_utc_timestamp(epoch_seconds: float) -> str:
+    return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
+
+
+def _render_auto_capture_controls() -> None:
+    auto_capture_enabled = st.checkbox("Activar auto-captura ONPE real", value=False)
+    interval_seconds = st.selectbox(
+        "Intervalo de auto-captura",
+        AUTO_CAPTURE_INTERVALS,
+        index=0,
+        format_func=lambda value: f"{value} segundos",
+    )
+    st.caption("La auto-captura solo funciona en REAL_READ_ONLY con ONPE real habilitado.")
+
+    last_capture_ts = st.session_state.get("last_auto_capture_ts")
+    if last_capture_ts is not None:
+        st.caption(f"Última auto-captura: {_format_utc_timestamp(float(last_capture_ts))}")
+
+    if not auto_capture_enabled:
+        return
+
+    if not auto_capture_is_eligible(SOURCE_MODE, REAL_ONPE_ENABLED):
+        st.warning("La auto-captura ONPE real requiere SOURCE_MODE=REAL_READ_ONLY y REAL_ONPE_ENABLED=True.")
+        return
+
+    now = time.time()
+    if auto_capture_interval_elapsed(now, last_capture_ts, int(interval_seconds)):
+        result = capture_cycle(force=True)
+        st.session_state["last_auto_capture_ts"] = now
+        if result == "captured":
+            st.success("Auto-captura ONPE real ejecutada.")
+        elif result == "unchanged":
+            st.info("Sin cambios nuevos respecto al último snapshot.")
+        return
+
+    countdown = auto_capture_countdown_seconds(now, last_capture_ts, int(interval_seconds))
+    st.caption(f"Próxima auto-captura en {countdown} segundos.")
 
 
 def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict]) -> None:
@@ -233,14 +293,22 @@ def render_dashboard() -> None:
         st.caption(f"Real ONPE habilitado: {REAL_ONPE_ENABLED}")
         st.caption(REAL_SOURCE_STATUS_NOTE)
         if "capture_success_message" in st.session_state:
-            st.success(st.session_state.pop("capture_success_message"))
+            message = st.session_state.pop("capture_success_message")
+            if message == "Sin cambios nuevos respecto al último snapshot.":
+                st.info(message)
+            else:
+                st.success(message)
         if st.button(_capture_button_label(), type="primary"):
-            if capture_cycle(force=True):
+            result = capture_cycle(force=True)
+            if result == "captured":
                 st.session_state["capture_success_message"] = _capture_success_message()
+            elif result == "unchanged":
+                st.session_state["capture_success_message"] = "Sin cambios nuevos respecto al último snapshot."
             st.rerun()
         if st.button("Captura con caché"):
             capture_cycle(force=False)
             st.rerun()
+        _render_auto_capture_controls()
         if st.button("Generar 12 snapshots mock"):
             generate_mock_snapshots(12)
             st.rerun()
