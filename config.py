@@ -20,7 +20,13 @@ ONPE_ID_ELECCION = 10
 ONPE_TIPO_FILTRO = "eleccion"
 ONPE_CACHE_TTL_SECONDS = 300
 MAX_REQUESTS_PER_ENDPOINT_PER_5_MIN = 1
+ONPE_HTTP_PROFILE = "transparent"  # transparent | browser_observed
 USER_AGENT = "PersoneroDigital-MVP/0.1 public-observability research; contact=local"
+ONPE_BROWSER_OBSERVED_USER_AGENT = (
+    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+    "AppleWebKit/537.36 (KHTML, like Gecko) "
+    "Chrome/148.0.0.0 Safari/537.36"
+)
 REAL_SOURCE_STATUS = "REAL_SOURCE_VALIDATED"
 REAL_SOURCE_STATUS_NOTE = (
     "Fuente pública oficial de segunda vuelta validada. "

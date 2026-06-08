@@ -32,3 +32,7 @@ data/evidence/*.jsonl
 
 # Local generated cache/state
 data/bronze/*.json
+
+# Local config backups
+config.py.bak
+config.py.*.bak
