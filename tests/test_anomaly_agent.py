@@ -31,6 +31,32 @@ def _history_from_gaps(gaps: list[int], actas_pcts: list[float]) -> list[dict]:
     ]
 
 
+def _real_history_item(sequence: int, gap: int, actas_pct: float) -> dict:
+    item = _history_item(sequence, gap, actas_pct)
+    item["snapshot"].update(
+        {
+            "source": "ONPE_REAL_PUBLIC_DATA",
+            "source_mode": "REAL_READ_ONLY",
+            "collection_mode": "real_read_only_public_snapshot",
+            "election_id": "SEP2026",
+        }
+    )
+    return item
+
+
+def _excluded_history_item(sequence: int, gap: int, actas_pct: float) -> dict:
+    item = _history_item(sequence, gap, actas_pct)
+    item["snapshot"].update(
+        {
+            "source": "MOCK_ONPE_PUBLIC_DATA",
+            "source_mode": "MOCK",
+            "collection_mode": "mock_passive_public_snapshot",
+            "election_id": "PER-GENERAL-MOCK-2026",
+        }
+    )
+    return item
+
+
 def test_large_negative_gap_movement_opens_case() -> None:
     history = _history_from_gaps(
         gaps=[1_000, 1_100, 1_200, 1_300, -11_300],
@@ -193,3 +219,32 @@ def test_seq_like_material_movement_can_open_case() -> None:
     assert events[0]["gap_delta"] == -58_964
     assert events[0]["actas_pct_delta"] == pytest.approx(1.239)
     assert events[0]["gap_delta_per_actas_pct"] == pytest.approx(-47_590.0, abs=0.01)
+
+
+def test_anomaly_baseline_excludes_contaminated_mock_snapshot_between_real_records() -> None:
+    history = [
+        _real_history_item(35, 1_000, 70.0),
+        _real_history_item(36, 1_100, 71.0),
+        _excluded_history_item(38, 1_000_000, 100.0),
+        _real_history_item(39, 1_200, 72.0),
+        _real_history_item(40, -11_300, 73.0),
+    ]
+
+    events = detect_gap_anomalies(history)
+
+    assert len(events) == 1
+    assert events[0]["sequence"] == 40
+    assert events[0]["gap_delta"] == -12_500
+    assert events[0]["actas_pct_delta"] == 1.0
+
+
+def test_excluded_latest_snapshot_does_not_reemit_previous_real_anomaly() -> None:
+    history = [
+        _real_history_item(35, 1_000, 70.0),
+        _real_history_item(36, 1_100, 71.0),
+        _real_history_item(37, 1_200, 72.0),
+        _real_history_item(39, -11_300, 73.0),
+        _excluded_history_item(38, 1_000_000, 100.0),
+    ]
+
+    assert detect_gap_anomalies(history) == []

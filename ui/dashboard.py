@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import logging
+import sys
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 from typing import Literal
 
 import pandas as pd
@@ -9,9 +12,10 @@ import streamlit as st
 
 from agents.anomaly_agent import detect_gap_anomalies
 from agents.evidence_agent import build_case, case_events
-from agents.integrity_agent import integrity_events, integrity_status, snapshot_hash
+from agents.integrity_agent import integrity_events, integrity_status, snapshot_content_hash, snapshot_hash
 from agents.onpe_agent import select_onpe_snapshot_source
 from config import (
+    APP_NAME,
     CANDIDATE_A_NAME,
     CANDIDATE_B_NAME,
     CASES_PATH,
@@ -34,12 +38,69 @@ from ui.soc_feed import render_soc_feed
 CaptureResult = Literal["captured", "unchanged", "failed"]
 AUTO_CAPTURE_INTERVALS = [300, 600, 900]
 AUTO_CAPTURE_RERUN_SECONDS = 30
+LOGGER = logging.getLogger(__name__)
+LAST_CAPTURE_DEBUG: dict = {}
+
+
+def _startup_log(message: str) -> None:
+    print(message, flush=True)
+
+
+def _running_as_streamlit_entrypoint() -> bool:
+    return any(Path(arg).as_posix().endswith("ui/dashboard.py") for arg in sys.argv)
 
 
 def _event_record(event: dict, captured_at: str) -> dict:
     record = dict(event)
     record["captured_at"] = captured_at
     return record
+
+
+def _capture_debug_payload(
+    snapshot: dict,
+    *,
+    force: bool,
+    result: CaptureResult,
+    duplicate: bool,
+    latest_persisted_sequence: int | str,
+) -> dict:
+    return {
+        "source": snapshot.get("source"),
+        "source_mode": snapshot.get("source_mode"),
+        "source_url": snapshot.get("source_url"),
+        "http_profile": ONPE_HTTP_PROFILE,
+        "cache_bypassed": force,
+        "actas_pct": snapshot.get("actas_contabilizadas_pct"),
+        "candidate_a_votes": snapshot.get("candidate_a_votes"),
+        "candidate_b_votes": snapshot.get("candidate_b_votes"),
+        "vote_gap_abs": snapshot.get("vote_gap_abs"),
+        "duplicate": duplicate,
+        "latest_persisted_sequence": latest_persisted_sequence,
+        "result": result,
+    }
+
+
+def _record_capture_debug(debug: dict) -> None:
+    global LAST_CAPTURE_DEBUG
+    LAST_CAPTURE_DEBUG = debug
+    LOGGER.info(
+        "capture result=%s source=%s profile=%s cache_bypassed=%s actas_pct=%s "
+        "candidate_a_votes=%s candidate_b_votes=%s vote_gap_abs=%s duplicate=%s latest_sequence=%s",
+        debug.get("result"),
+        debug.get("source"),
+        debug.get("http_profile"),
+        debug.get("cache_bypassed"),
+        debug.get("actas_pct"),
+        debug.get("candidate_a_votes"),
+        debug.get("candidate_b_votes"),
+        debug.get("vote_gap_abs"),
+        debug.get("duplicate"),
+        debug.get("latest_persisted_sequence"),
+    )
+    try:
+        st.session_state["last_capture_debug"] = debug
+    except Exception:
+        return
 
 
 def capture_cycle(force: bool = False) -> CaptureResult:
@@ -51,11 +112,27 @@ def capture_cycle(force: bool = False) -> CaptureResult:
     except RuntimeError as exc:
         st.warning(str(exc))
         return "failed"
+    except Exception as exc:
+        LOGGER.exception("capture failed")
+        st.warning(f"No se pudo completar la captura: {exc}")
+        return "failed"
     digest = snapshot_hash(snapshot)
+    content_digest = snapshot_content_hash(snapshot)
     snapshot.setdefault("snapshot_hash", digest)
     captured_at = datetime.now(timezone.utc).isoformat()
     snapshots = read_jsonl(SNAPSHOTS_PATH)
-    if snapshots and snapshots[-1]["hash"] == digest:
+    previous_content_digest = snapshot_content_hash(snapshots[-1]["snapshot"]) if snapshots else None
+    latest_sequence = snapshots[-1]["snapshot"].get("sequence", "-") if snapshots else "-"
+    if snapshots and previous_content_digest == content_digest:
+        _record_capture_debug(
+            _capture_debug_payload(
+                snapshot,
+                force=force,
+                result="unchanged",
+                duplicate=True,
+                latest_persisted_sequence=latest_sequence,
+            )
+        )
         return "unchanged"
 
     artifact_type = "aggregate_snapshot"
@@ -64,6 +141,7 @@ def capture_cycle(force: bool = False) -> CaptureResult:
     snapshot_record = {
         "captured_at": captured_at,
         "hash": digest,
+        "content_hash": content_digest,
         "snapshot_hash": digest,
         "artifact_type": artifact_type,
         "integrity_status": status,
@@ -81,6 +159,15 @@ def capture_cycle(force: bool = False) -> CaptureResult:
             append_jsonl(CASES_PATH, case)
             for case_event in case_events(case):
                 append_jsonl(EVENTS_PATH, _event_record(case_event, captured_at))
+    _record_capture_debug(
+        _capture_debug_payload(
+            snapshot,
+            force=force,
+            result="captured",
+            duplicate=False,
+            latest_persisted_sequence=snapshot["sequence"],
+        )
+    )
     return "captured"
 
 
@@ -121,6 +208,18 @@ def _capture_success_message() -> str:
     return "Snapshot capturado."
 
 
+def _render_capture_debug(debug: dict) -> None:
+    st.caption(
+        "Valores extraídos: "
+        f"actas={debug.get('actas_pct')}%, "
+        f"Keiko={debug.get('candidate_a_votes')}, "
+        f"Sánchez={debug.get('candidate_b_votes')}, "
+        f"brecha={debug.get('vote_gap_abs')}, "
+        f"duplicado={debug.get('duplicate')}, "
+        f"última secuencia={debug.get('latest_persisted_sequence')}."
+    )
+
+
 def _official_source_status_text() -> str:
     if SOURCE_MODE == "MOCK":
         return "El sistema opera en modo MOCK. No se están capturando datos reales de ONPE."
@@ -156,7 +255,7 @@ def _format_utc_timestamp(epoch_seconds: float) -> str:
     return datetime.fromtimestamp(epoch_seconds, tz=timezone.utc).strftime("%Y-%m-%d %H:%M:%S UTC")
 
 
-def _render_auto_capture_controls() -> None:
+def _render_auto_capture_controls() -> tuple[bool, int, bool]:
     auto_capture_enabled = st.checkbox("Activar auto-captura ONPE real", value=False)
     interval_seconds = st.selectbox(
         "Intervalo de auto-captura",
@@ -171,28 +270,39 @@ def _render_auto_capture_controls() -> None:
         st.caption(f"Última auto-captura: {_format_utc_timestamp(float(last_capture_ts))}")
 
     if not auto_capture_enabled:
-        return
+        return False, int(interval_seconds), False
 
-    if not auto_capture_is_eligible(SOURCE_MODE, REAL_ONPE_ENABLED):
+    eligible = auto_capture_is_eligible(SOURCE_MODE, REAL_ONPE_ENABLED)
+    if not eligible:
         st.warning("La auto-captura ONPE real requiere SOURCE_MODE=REAL_READ_ONLY y REAL_ONPE_ENABLED=True.")
+        return True, int(interval_seconds), False
+
+    countdown = auto_capture_countdown_seconds(time.time(), last_capture_ts, int(interval_seconds))
+    if countdown > 0:
+        st.caption(f"Próxima auto-captura en {countdown} segundos.")
+    return True, int(interval_seconds), True
+
+
+def _maybe_run_auto_capture_after_render(
+    auto_capture_enabled: bool,
+    interval_seconds: int,
+    eligible: bool,
+) -> None:
+    _startup_log("before_auto_capture")
+    if not should_auto_capture_rerun(auto_capture_enabled, eligible):
+        return
+    if not st.session_state.get("dashboard_has_rendered"):
         return
 
+    last_capture_ts = st.session_state.get("last_auto_capture_ts")
     now = time.time()
-    if auto_capture_interval_elapsed(now, last_capture_ts, int(interval_seconds)):
+    if auto_capture_interval_elapsed(now, last_capture_ts, interval_seconds):
         result = capture_cycle(force=True)
         st.session_state["last_auto_capture_ts"] = now
         if result == "captured":
-            st.success("Auto-captura ONPE real ejecutada.")
+            st.sidebar.success("Auto-captura ONPE real ejecutada.")
         elif result == "unchanged":
-            st.info("Sin cambios nuevos respecto al último snapshot.")
-    else:
-        countdown = auto_capture_countdown_seconds(now, last_capture_ts, int(interval_seconds))
-        st.caption(f"Próxima auto-captura en {countdown} segundos.")
-
-    # Uses Streamlit's normal rerun model; this is not a background job.
-    if should_auto_capture_rerun(auto_capture_enabled, True):
-        time.sleep(AUTO_CAPTURE_RERUN_SECONDS)
-        st.rerun()
+            st.sidebar.info("Sin cambios nuevos respecto al último snapshot.")
 
 
 def _render_overview(snapshots: list[dict], cases: list[dict], events: list[dict]) -> None:
@@ -292,8 +402,12 @@ def _render_methodology() -> None:
 
 
 def render_dashboard() -> None:
+    _startup_log("dashboard_start")
     st.title("Personero Digital")
     _render_disclaimers()
+    auto_capture_enabled = False
+    auto_capture_interval = AUTO_CAPTURE_INTERVALS[0]
+    auto_capture_eligible = False
     with st.sidebar:
         st.header("Controles")
         st.caption(f"Fuente de datos: {SOURCE_MODE}")
@@ -314,31 +428,59 @@ def render_dashboard() -> None:
             elif result == "unchanged":
                 st.session_state["capture_success_message"] = "Sin cambios nuevos respecto al último snapshot."
             st.rerun()
+        force_real_enabled = SOURCE_MODE == "REAL_READ_ONLY" and REAL_ONPE_ENABLED
+        if st.sidebar.button("Forzar captura ONPE real ahora", disabled=not force_real_enabled):
+            result = capture_cycle(force=True)
+            if result == "captured":
+                st.success("Snapshot ONPE real capturado en modo solo lectura.")
+            elif result == "unchanged":
+                st.info("Sin cambios nuevos respecto al último snapshot.")
+            else:
+                st.warning("No se pudo capturar snapshot ONPE real.")
         if st.button("Captura con caché"):
             capture_cycle(force=False)
             st.rerun()
-        _render_auto_capture_controls()
+        if "last_capture_debug" in st.session_state:
+            _render_capture_debug(st.session_state["last_capture_debug"])
+        auto_capture_enabled, auto_capture_interval, auto_capture_eligible = _render_auto_capture_controls()
         if st.button("Generar 12 snapshots mock"):
             generate_mock_snapshots(12)
             st.rerun()
         if st.button("Generar escenario de congelación"):
             generate_freeze_scenario()
             st.rerun()
+    _startup_log("controls_rendered")
 
     snapshots = read_jsonl(SNAPSHOTS_PATH)
     events = read_jsonl(EVENTS_PATH)
     cases = read_jsonl(CASES_PATH)
+    _startup_log(f"snapshots_loaded snapshots={len(snapshots)} events={len(events)} cases={len(cases)}")
 
     tabs = st.tabs(["Resumen", "Comportamiento Electoral", "Feed SOC", "Integridad", "Casos", "Metodología"])
     with tabs[0]:
+        _startup_log("render_tab_resumen")
         _render_overview(snapshots, cases, events)
     with tabs[1]:
+        _startup_log("render_tab_comportamiento")
         render_electoral_behavior(snapshots, events, cases)
     with tabs[2]:
+        _startup_log("render_tab_soc")
         render_soc_feed(events)
     with tabs[3]:
+        _startup_log("render_tab_integridad")
         render_integrity_view(snapshots, events)
     with tabs[4]:
+        _startup_log("render_tab_casos")
         render_case_view(cases)
     with tabs[5]:
+        _startup_log("render_tab_metodologia")
         _render_methodology()
+    _startup_log("tabs_rendered")
+    _startup_log("dashboard_render_complete")
+    _maybe_run_auto_capture_after_render(auto_capture_enabled, auto_capture_interval, auto_capture_eligible)
+    st.session_state["dashboard_has_rendered"] = True
+
+
+if _running_as_streamlit_entrypoint():
+    st.set_page_config(page_title=APP_NAME, layout="wide", page_icon="PD")
+    render_dashboard()

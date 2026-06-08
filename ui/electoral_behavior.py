@@ -5,31 +5,11 @@ import pandas as pd
 import streamlit as st
 
 from config import CANDIDATE_A_NAME, CANDIDATE_B_NAME
-
-
-def _snapshot_payload(item: dict) -> dict:
-    return item.get("snapshot", item)
+from utils.snapshot_filters import filter_real_read_only_snapshots, snapshot_payload
 
 
 def filter_real_behavior_snapshots(snapshot_records: list[dict]) -> list[dict]:
-    filtered: list[dict] = []
-    for item in snapshot_records:
-        snapshot = _snapshot_payload(item)
-        source_mode = str(snapshot.get("source_mode", "")).upper()
-        source = str(snapshot.get("source", "")).upper()
-        collection_mode = str(snapshot.get("collection_mode", "")).lower()
-
-        if source_mode == "MOCK":
-            continue
-        if "MOCK" in source:
-            continue
-        if any(token in collection_mode for token in ("mock", "demo", "freeze", "frozen", "system_frozen")):
-            continue
-        if source_mode != "REAL_READ_ONLY":
-            continue
-
-        filtered.append(snapshot)
-    return filtered
+    return [snapshot_payload(item) for item in filter_real_read_only_snapshots(snapshot_records)]
 
 
 def build_vote_pct_long_df(snapshots: list[dict]) -> pd.DataFrame:

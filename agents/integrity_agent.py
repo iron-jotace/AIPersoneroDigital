@@ -6,10 +6,36 @@ from config import FREEZE_THRESHOLD_PCT
 from storage.json_store import canonical_hash
 
 HASH_ALERT_ARTIFACT_TYPES = {"document", "acta"}
+SNAPSHOT_CONTENT_HASH_FIELDS = (
+    "source",
+    "source_mode",
+    "collection_mode",
+    "election_id",
+    "candidate_a_name",
+    "candidate_b_name",
+    "candidate_a_votes",
+    "candidate_b_votes",
+    "candidate_a_pct",
+    "candidate_b_pct",
+    "vote_gap_abs",
+    "vote_gap_pct",
+    "actas_contabilizadas_pct",
+    "actas_contabilizadas",
+    "total_actas",
+    "total_votos_validos",
+    "total_votos_emitidos",
+    "fecha_actualizacion_onpe",
+)
 
 
 def snapshot_hash(snapshot: dict[str, Any]) -> str:
     return canonical_hash(snapshot)
+
+
+def snapshot_content_hash(snapshot: dict[str, Any]) -> str:
+    """Hash stable extracted result fields for duplicate capture detection."""
+    content = {field: snapshot.get(field) for field in SNAPSHOT_CONTENT_HASH_FIELDS if field in snapshot}
+    return canonical_hash(content)
 
 
 def snapshot_captured_summary(snapshot: dict[str, Any]) -> str:

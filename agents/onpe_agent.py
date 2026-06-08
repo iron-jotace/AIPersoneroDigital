@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import logging
 import random
 import time
 from datetime import datetime, timezone
@@ -35,6 +36,7 @@ CACHE_VERSION = 4
 START_PROGRESS_PCT = 60.0
 PROGRESS_STEP_PCT = 3.1
 _REAL_SNAPSHOT_CACHE: dict[str, Any] = {"fetched_at_epoch": 0.0, "snapshot": None}
+LOGGER = logging.getLogger(__name__)
 
 
 def _now_iso() -> str:
@@ -178,9 +180,29 @@ def fetch_real_onpe_snapshot(force: bool = False) -> dict[str, Any]:
     now = time.time()
     cached = _REAL_SNAPSHOT_CACHE.get("snapshot")
     if cached and not force and now - float(_REAL_SNAPSHOT_CACHE["fetched_at_epoch"]) < ONPE_CACHE_TTL_SECONDS:
+        LOGGER.info(
+            "ONPE real snapshot cache used profile=%s portal=%s actas_pct=%s candidate_a_votes=%s "
+            "candidate_b_votes=%s vote_gap_abs=%s",
+            ONPE_HTTP_PROFILE,
+            ONPE_PORTAL_URL,
+            cached.get("actas_contabilizadas_pct"),
+            cached.get("candidate_a_votes"),
+            cached.get("candidate_b_votes"),
+            cached.get("vote_gap_abs"),
+        )
         return json.loads(json.dumps(cached, sort_keys=True))
 
     params = {"idEleccion": ONPE_ID_ELECCION, "tipoFiltro": ONPE_TIPO_FILTRO}
+    LOGGER.info(
+        "ONPE real snapshot request profile=%s cache_bypassed=%s process_endpoint=%s totals_endpoint=%s "
+        "participants_endpoint=%s params=%s",
+        ONPE_HTTP_PROFILE,
+        force,
+        urljoin(ONPE_BASE_URL, ONPE_PROCESS_ENDPOINT),
+        urljoin(ONPE_BASE_URL, ONPE_TOTALS_ENDPOINT),
+        urljoin(ONPE_BASE_URL, ONPE_PARTICIPANTS_ENDPOINT),
+        params,
+    )
     with requests.Session() as session:
         session.headers.update(_onpe_headers())
         process_response = _get_json(session, ONPE_PROCESS_ENDPOINT)
@@ -229,6 +251,16 @@ def fetch_real_onpe_snapshot(force: bool = False) -> dict[str, Any]:
         "fecha_actualizacion_onpe": totals_data.get("fechaActualizacion"),
         "snapshot_hash": canonical_hash(raw_payload),
     }
+    LOGGER.info(
+        "ONPE real snapshot extracted actas_pct=%s candidate_a_votes=%s candidate_b_votes=%s "
+        "vote_gap_abs=%s sequence=%s profile=%s",
+        snapshot["actas_contabilizadas_pct"],
+        snapshot["candidate_a_votes"],
+        snapshot["candidate_b_votes"],
+        snapshot["vote_gap_abs"],
+        snapshot["sequence"],
+        ONPE_HTTP_PROFILE,
+    )
     _REAL_SNAPSHOT_CACHE["fetched_at_epoch"] = now
     _REAL_SNAPSHOT_CACHE["snapshot"] = snapshot
     return json.loads(json.dumps(snapshot, sort_keys=True))

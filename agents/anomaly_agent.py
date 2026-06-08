@@ -4,6 +4,7 @@ from typing import Any
 
 from models.ers import compute_ers
 from models.mad import mad_z_scores
+from utils.snapshot_filters import filter_real_read_only_snapshots
 
 MIN_MOVEMENTS_FOR_MAD = 3
 MAD_ANOMALY_THRESHOLD = 3.5
@@ -83,10 +84,15 @@ def detect_gap_anomalies(history: list[dict[str, Any]]) -> list[dict[str, Any]]:
     if len(history) < 4:
         return []
 
-    records = _movement_records(history)
+    real_history = filter_real_read_only_snapshots(history)
+    if real_history and history[-1] is not real_history[-1]:
+        return []
+    scoring_history = real_history if real_history else history
+
+    records = _movement_records(scoring_history)
     if len(records) < MIN_MOVEMENTS_FOR_MAD:
         return []
-    if records[-1]["history_item"] is not history[-1]:
+    if records[-1]["history_item"] is not scoring_history[-1]:
         return []
 
     normalized_movements = [record["gap_delta_per_actas_pct"] for record in records]
